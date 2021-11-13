@@ -1,0 +1,29 @@
+import torch
+import torch.nn as nn
+from torch.autograd import Function
+import numpy as np
+from utils.eval import accuracy, get_preds, mpjpe, get_preds_3d
+class FusionLoss(nn.Module):
+
+  def forward(self, output, mask, ind, target, gt_2d,bck_depth_slp1,bck_depth_slp2):
+    pred = _tranpose_and_gather_scalar(output, ind)
+    loss = (torch.FloatTensor(1)[0] * 0).cuda(self.device, non_blocking=True)
+    predcrop=(torch.FloatTensor(pred.shape[0])).cuda(self.device, non_blocking=True)
+    predcrop1=(torch.FloatTensor(pred.shape[0])).cuda(self.device, non_blocking=True)
+    for ii in range(pred.shape[0]):
+        predcrop[ii]=pred[ii,3]
+    for ii in range(pred.shape[0]):
+        predcrop1[ii]=pred[ii,4]
+    if self.reg_weight > 0:
+      loss += self.reg_weight * reg_loss(pred, target, mask)
+      #print("insidepred",predcrop.dtype)
+      #print("insidepredcrop",pred)
+      #print("insidegt",predcrop,"hagdhj",bck_depth_slp1)
+    if self.var_weight > 0:
+        slope_loss = (nn.functional.smooth_l1_loss(predcrop, bck_depth_slp1, size_average=True)).float()
+        slope_loss1=(nn.functional.smooth_l1_loss(predcrop1, bck_depth_slp2, size_average=True)).float()
+        loss2=0.5*(slope_loss+slope_loss1)
+        #print('loss2',loss2,'loss',loss)
+        loss+=self.var_weight *(loss2)
+    #print(loss.dtype)
+    return loss.cuda(self.device, non_blocking=True)
